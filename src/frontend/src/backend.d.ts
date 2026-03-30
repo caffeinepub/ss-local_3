@@ -7,5 +7,17 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+
+export type RegisterResult = { ok: null } | { err: string };
+export type LoginResult = { ok: { role: string; mobile: string; validityDate: string | null } } | { err: string };
+export type UserInfo = { mobile: string; validityDate: string | null };
+
 export interface backendInterface {
+    register(mobile: string, password: string): Promise<RegisterResult>;
+    login(username: string, password: string): Promise<LoginResult>;
+    listAllUsers(): Promise<UserInfo[]>;
+    setUserValidity(mobile: string, validityDate: string): Promise<RegisterResult>;
+    removeUserValidity(mobile: string): Promise<RegisterResult>;
+    deleteUser(mobile: string): Promise<RegisterResult>;
+    getUserInfo(mobile: string): Promise<UserInfo | null>;
 }

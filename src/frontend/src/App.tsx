@@ -1,7 +1,12 @@
+import AdminPanel from "@/components/AdminPanel";
+import LoginPage from "@/components/LoginPage";
+import SignUpPage from "@/components/SignUpPage";
 import { Badge } from "@/components/ui/badge";
-import { Play, Radio, Tv, Volume2, VolumeX } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
+import { Lock, LogOut, Play, Radio, Tv, Volume2, VolumeX } from "lucide-react";
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface Channel {
   name: string;
@@ -11,6 +16,14 @@ interface Channel {
   color: string;
   logo?: string;
 }
+
+interface CurrentUser {
+  role: string;
+  mobile: string;
+  validityDate: string | null;
+}
+
+type View = "login" | "signup" | "admin" | "main";
 
 const NEWS_CHANNELS: Channel[] = [
   {
@@ -49,11 +62,11 @@ const NEWS_CHANNELS: Channel[] = [
     logo: "/assets/uploads/siti_news-019d3d1d-88cc-710a-bfb4-f825ae3bf25d-1.jpeg",
   },
   {
-    name: "Etv Telangana",
-    videoId: "zZx--NX7wiE",
+    name: "Mahaa News",
+    videoId: "HL8IgeQwPMc",
     isLive: true,
-    color: "#6A1B9A",
-    logo: "/assets/uploads/etv_telangana-019d3d1d-96dd-754d-99a1-51b032788983-15.png",
+    color: "#D32F2F",
+    logo: "/assets/uploads/mahaa_news-019d3d71-e0af-7171-aa5e-9c8604d1fc83-1.png",
   },
   {
     name: "Zee Telugu News",
@@ -166,17 +179,38 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
+function isUserActivated(validityDate: string | null): boolean {
+  if (!validityDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const validity = new Date(validityDate);
+  return validity >= today;
+}
+
 interface ChannelCardProps {
   channel: Channel;
   isActive: boolean;
   index: number;
+  isLocked: boolean;
   onPlay: (channel: Channel) => void;
 }
 
-function ChannelCard({ channel, isActive, index, onPlay }: ChannelCardProps) {
+function ChannelCard({
+  channel,
+  isActive,
+  index,
+  isLocked,
+  onPlay,
+}: ChannelCardProps) {
   const isExternalOnly = !!channel.channelUrl && !channel.videoId;
 
   const handleClick = () => {
+    if (isLocked) {
+      toast.error("Subscribe to access this channel", {
+        description: "Please contact admin to activate your account.",
+      });
+      return;
+    }
     if (isExternalOnly) {
       window.open(channel.channelUrl, "_blank", "noopener,noreferrer");
     } else {
@@ -198,11 +232,11 @@ function ChannelCard({ channel, isActive, index, onPlay }: ChannelCardProps) {
       `}
       style={{ backgroundColor: "oklch(0.22 0.035 200)" }}
     >
-      {/* Logo / thumbnail area — fills full card width */}
+      {/* Logo / thumbnail area */}
       <div
         className="relative w-full overflow-hidden"
         style={{
-          height: 65,
+          height: 55,
           backgroundColor: `${channel.color}22`,
           borderBottom: `2px solid ${channel.color}44`,
         }}
@@ -230,15 +264,22 @@ function ChannelCard({ channel, isActive, index, onPlay }: ChannelCardProps) {
           </span>
         )}
 
+        {/* Lock overlay when not activated */}
+        {isLocked && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <Lock className="w-4 h-4 text-white/80" />
+          </div>
+        )}
+
         {/* Active indicator */}
-        {isActive && (
+        {isActive && !isLocked && (
           <span className="absolute top-1 right-1 bg-primary/80 text-primary-foreground text-[7px] font-bold px-1 py-0.5 rounded-full">
             ▶
           </span>
         )}
       </div>
 
-      {/* Card footer — channel name only */}
+      {/* Card footer */}
       <div className="px-1.5 py-1">
         <span className="text-foreground font-semibold text-xs truncate block text-center">
           {channel.name}
@@ -253,6 +294,7 @@ interface SectionProps {
   icon: React.ReactNode;
   channels: Channel[];
   activeVideoId: string | null;
+  isLocked: boolean;
   onPlay: (channel: Channel) => void;
   sectionId: string;
 }
@@ -262,6 +304,7 @@ function Section({
   icon,
   channels,
   activeVideoId,
+  isLocked,
   onPlay,
   sectionId,
 }: SectionProps) {
@@ -281,6 +324,7 @@ function Section({
             channel={ch}
             isActive={!!activeVideoId && activeVideoId === ch.videoId}
             index={i}
+            isLocked={isLocked}
             onPlay={onPlay}
           />
         ))}
@@ -290,10 +334,32 @@ function Section({
 }
 
 export default function App() {
+  const [view, setView] = useState<View>("login");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
+  // Main view state
   const [currentVideoId, setCurrentVideoId] = useState<string>("II_m28Bm-iM");
   const [currentTitle, setCurrentTitle] = useState<string>("TV9");
   const [isMuted, setIsMuted] = useState<boolean>(true);
   const playerRef = useRef<HTMLDivElement>(null);
+
+  const handleLoginSuccess = (user: {
+    role: string;
+    mobile: string;
+    validityDate: string | null;
+  }) => {
+    setCurrentUser(user);
+    if (user.role === "admin") {
+      setView("admin");
+    } else {
+      setView("main");
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setView("login");
+  };
 
   const handlePlay = (channel: Channel) => {
     if (channel.videoId) {
@@ -307,6 +373,9 @@ export default function App() {
     setIsMuted(false);
   };
 
+  const activated = currentUser
+    ? isUserActivated(currentUser.validityDate)
+    : false;
   const embedUrl = `https://www.youtube.com/embed/${currentVideoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0`;
   const currentYear = new Date().getFullYear();
   const hostname =
@@ -314,6 +383,40 @@ export default function App() {
       ? encodeURIComponent(window.location.hostname)
       : "";
 
+  if (view === "login") {
+    return (
+      <>
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          onSignUp={() => setView("signup")}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
+  if (view === "signup") {
+    return (
+      <>
+        <SignUpPage
+          onBack={() => setView("login")}
+          onSuccess={() => setView("login")}
+        />
+        <Toaster />
+      </>
+    );
+  }
+
+  if (view === "admin") {
+    return (
+      <>
+        <AdminPanel onLogout={handleLogout} />
+        <Toaster />
+      </>
+    );
+  }
+
+  // Main view
   return (
     <div
       className="min-h-screen flex flex-col"
@@ -322,6 +425,8 @@ export default function App() {
           "linear-gradient(180deg, oklch(0.16 0.045 200) 0%, oklch(0.12 0.04 200) 100%)",
       }}
     >
+      <Toaster />
+
       {/* Header */}
       <header
         className="sticky top-0 z-50 flex items-center gap-3 px-6 py-4 border-b border-border"
@@ -334,16 +439,36 @@ export default function App() {
           <img
             src="/assets/uploads/ss_local-019d3cf2-cb33-77b6-80dc-021c2b6b1286-1.png"
             alt="SS Local"
-            className="h-14 w-auto object-contain"
+            style={{ height: 46 }}
+            className="w-auto object-contain"
           />
         </div>
         <div className="flex-1" />
-        <Badge
-          variant="outline"
-          className="border-primary/40 text-primary text-xs"
+        <span className="text-muted-foreground text-xs hidden sm:block">
+          {currentUser?.mobile}
+        </span>
+        {!activated && (
+          <Badge className="bg-red-600/20 text-red-400 border-red-600/40 text-xs">
+            Subscribe to Unlock
+          </Badge>
+        )}
+        {activated && (
+          <Badge
+            variant="outline"
+            className="border-primary/40 text-primary text-xs"
+          >
+            Telugu Media
+          </Badge>
+        )}
+        <button
+          type="button"
+          data-ocid="main.button"
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-white/5"
         >
-          Telugu Media
-        </Badge>
+          <LogOut className="w-3.5 h-3.5" />
+          Logout
+        </button>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
@@ -358,16 +483,27 @@ export default function App() {
               className="relative w-full"
               style={{ paddingBottom: "56.25%" }}
             >
-              <iframe
-                key={`${currentVideoId}-${isMuted}`}
-                src={embedUrl}
-                title={currentTitle}
-                allow="autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-                className="absolute inset-0 w-full h-full border-0"
-              />
-              {/* Unmute overlay — shown when muted */}
-              {isMuted && (
+              {activated ? (
+                <iframe
+                  key={`${currentVideoId}-${isMuted}`}
+                  src={embedUrl}
+                  title={currentTitle}
+                  allow="autoplay; encrypted-media; fullscreen"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full border-0"
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
+                  <Lock className="w-12 h-12 text-white/40 mb-3" />
+                  <p className="text-white font-semibold text-lg">
+                    Subscribe to Watch
+                  </p>
+                  <p className="text-white/60 text-sm mt-1">
+                    Contact admin to activate your account
+                  </p>
+                </div>
+              )}
+              {activated && isMuted && (
                 <button
                   type="button"
                   className="absolute inset-0 flex items-center justify-center cursor-pointer z-20 w-full h-full"
@@ -418,7 +554,7 @@ export default function App() {
             <span className="text-foreground font-semibold text-sm">
               {currentTitle}
             </span>
-            {isMuted && (
+            {activated && isMuted && (
               <button
                 type="button"
                 onClick={handleUnmute}
@@ -437,6 +573,7 @@ export default function App() {
           icon={<Tv style={{ width: 15, height: 15 }} />}
           channels={NEWS_CHANNELS}
           activeVideoId={currentVideoId}
+          isLocked={!activated}
           onPlay={handlePlay}
           sectionId="news"
         />
@@ -447,6 +584,7 @@ export default function App() {
           icon={<span style={{ fontSize: 20, lineHeight: 1 }}>🕉️</span>}
           channels={BHAKTHI_CHANNELS}
           activeVideoId={currentVideoId}
+          isLocked={!activated}
           onPlay={handlePlay}
           sectionId="bhakthi"
         />
@@ -457,6 +595,7 @@ export default function App() {
           icon={<Play style={{ width: 15, height: 15 }} />}
           channels={YOUTUBE_CHANNELS}
           activeVideoId={currentVideoId}
+          isLocked={!activated}
           onPlay={handlePlay}
           sectionId="youtube"
         />
