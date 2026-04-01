@@ -2,8 +2,29 @@ import AdminPanel from "@/components/AdminPanel";
 import LoginPage from "@/components/LoginPage";
 import SignUpPage from "@/components/SignUpPage";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Toaster } from "@/components/ui/sonner";
-import { Lock, LogOut, Play, Radio, Tv, Volume2, VolumeX } from "lucide-react";
+import { useActor } from "@/hooks/useActor";
+import {
+  Check,
+  Lock,
+  LogOut,
+  Menu,
+  Pencil,
+  Play,
+  Radio,
+  Tv,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -20,10 +41,25 @@ interface Channel {
 interface CurrentUser {
   role: string;
   mobile: string;
+  fullName: string;
+  village: string;
   validityDate: string | null;
 }
 
 type View = "login" | "signup" | "admin" | "main";
+
+interface UserActor {
+  updatePassword(
+    mobile: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ ok: null } | { err: string }>;
+  updateUserInfo(
+    mobile: string,
+    fullName: string,
+    village: string,
+  ): Promise<{ ok: null } | { err: string }>;
+}
 
 const NEWS_CHANNELS: Channel[] = [
   {
@@ -232,7 +268,6 @@ function ChannelCard({
       `}
       style={{ backgroundColor: "oklch(0.22 0.035 200)" }}
     >
-      {/* Logo / thumbnail area */}
       <div
         className="relative w-full overflow-hidden"
         style={{
@@ -256,7 +291,6 @@ function ChannelCard({
           </div>
         )}
 
-        {/* LIVE badge */}
         {channel.isLive && (
           <span className="absolute top-1 left-1 flex items-center gap-0.5 bg-red-600 text-white text-[7px] font-bold px-1 py-0.5 rounded-full live-pulse">
             <span className="w-1 h-1 bg-white rounded-full inline-block" />
@@ -264,14 +298,12 @@ function ChannelCard({
           </span>
         )}
 
-        {/* Lock overlay when not activated */}
         {isLocked && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <Lock className="w-4 h-4 text-white/80" />
           </div>
         )}
 
-        {/* Active indicator */}
         {isActive && !isLocked && (
           <span className="absolute top-1 right-1 bg-primary/80 text-primary-foreground text-[7px] font-bold px-1 py-0.5 rounded-full">
             ▶
@@ -279,7 +311,6 @@ function ChannelCard({
         )}
       </div>
 
-      {/* Card footer */}
       <div className="px-1.5 py-1">
         <span className="text-foreground font-semibold text-xs truncate block text-center">
           {channel.name}
@@ -333,9 +364,393 @@ function Section({
   );
 }
 
+// User side menu
+interface UserMenuProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentUser: CurrentUser;
+  onUserUpdate: (updated: Partial<CurrentUser>) => void;
+  onLogout: () => void;
+  actor: UserActor | null;
+}
+
+function UserMenu({
+  open,
+  onOpenChange,
+  currentUser,
+  onUserUpdate,
+  onLogout,
+  actor,
+}: UserMenuProps) {
+  // Inline edit state
+  const [editingFullName, setEditingFullName] = useState(false);
+  const [editingVillage, setEditingVillage] = useState(false);
+  const [fullNameVal, setFullNameVal] = useState(currentUser.fullName);
+  const [villageVal, setVillageVal] = useState(currentUser.village);
+  const [savingInfo, setSavingInfo] = useState(false);
+
+  // Password update state
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [savingPwd, setSavingPwd] = useState(false);
+
+  const handleSaveFullName = async () => {
+    if (!actor) return;
+    setSavingInfo(true);
+    try {
+      const result = await actor.updateUserInfo(
+        currentUser.mobile,
+        fullNameVal,
+        currentUser.village,
+      );
+      if ("ok" in result) {
+        onUserUpdate({ fullName: fullNameVal });
+        setEditingFullName(false);
+        toast.success("Full name updated.");
+      } else {
+        toast.error(result.err);
+      }
+    } catch {
+      toast.error("Failed to update full name.");
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
+  const handleSaveVillage = async () => {
+    if (!actor) return;
+    setSavingInfo(true);
+    try {
+      const result = await actor.updateUserInfo(
+        currentUser.mobile,
+        currentUser.fullName,
+        villageVal,
+      );
+      if ("ok" in result) {
+        onUserUpdate({ village: villageVal });
+        setEditingVillage(false);
+        toast.success("Village updated.");
+      } else {
+        toast.error(result.err);
+      }
+    } catch {
+      toast.error("Failed to update village.");
+    } finally {
+      setSavingInfo(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (newPwd !== confirmPwd) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+    if (newPwd.length < 6) {
+      toast.error("New password must be at least 6 characters.");
+      return;
+    }
+    if (!actor) return;
+    setSavingPwd(true);
+    try {
+      const result = await actor.updatePassword(
+        currentUser.mobile,
+        currentPwd,
+        newPwd,
+      );
+      if ("ok" in result) {
+        toast.success("Password updated successfully.");
+        setCurrentPwd("");
+        setNewPwd("");
+        setConfirmPwd("");
+      } else {
+        toast.error(result.err);
+      }
+    } catch {
+      toast.error("Failed to update password.");
+    } finally {
+      setSavingPwd(false);
+    }
+  };
+
+  const activated = isUserActivated(currentUser.validityDate);
+  const validityDate = currentUser.validityDate;
+  let subscriptionStatus: React.ReactNode;
+  if (!validityDate) {
+    subscriptionStatus = (
+      <Badge className="bg-red-600/20 text-red-400 border-red-600/40">
+        Not Activated
+      </Badge>
+    );
+  } else if (activated) {
+    subscriptionStatus = (
+      <div>
+        <Badge className="bg-green-600/20 text-green-400 border-green-600/40">
+          Active
+        </Badge>
+        <div className="text-xs text-muted-foreground mt-1">
+          Active until: {validityDate}
+        </div>
+      </div>
+    );
+  } else {
+    subscriptionStatus = (
+      <div>
+        <Badge className="bg-orange-600/20 text-orange-400 border-orange-600/40">
+          Expired
+        </Badge>
+        <div className="text-xs text-muted-foreground mt-1">
+          Expired on: {validityDate}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="left"
+        className="w-80 flex flex-col gap-0 p-0 overflow-y-auto"
+        style={{
+          backgroundColor: "oklch(0.15 0.04 200)",
+          borderColor: "oklch(0.25 0.04 200)",
+        }}
+        data-ocid="user.sheet"
+      >
+        <SheetHeader className="px-5 pt-6 pb-4 border-b border-border">
+          <SheetTitle className="text-foreground text-lg font-bold">
+            My Account
+          </SheetTitle>
+        </SheetHeader>
+
+        <div className="flex-1 px-5 py-4 space-y-6">
+          {/* User Info Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              User Info
+            </h3>
+            <div className="space-y-3">
+              {/* Full Name */}
+              <div
+                className="rounded-lg p-3 ring-1 ring-border"
+                style={{ backgroundColor: "oklch(0.20 0.035 200)" }}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">
+                    Full Name
+                  </span>
+                  {!editingFullName ? (
+                    <button
+                      type="button"
+                      data-ocid="user.edit_button"
+                      onClick={() => {
+                        setFullNameVal(currentUser.fullName);
+                        setEditingFullName(true);
+                      }}
+                      className="text-primary hover:text-primary/80 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingFullName(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {editingFullName ? (
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      value={fullNameVal}
+                      onChange={(e) => setFullNameVal(e.target.value)}
+                      className="h-7 text-sm"
+                      data-ocid="user.input"
+                    />
+                    <button
+                      type="button"
+                      data-ocid="user.save_button"
+                      onClick={handleSaveFullName}
+                      disabled={savingInfo}
+                      className="flex items-center gap-1 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-md hover:bg-primary/80 disabled:opacity-50"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground font-medium">
+                    {currentUser.fullName || (
+                      <span className="text-muted-foreground italic">
+                        Not set
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+
+              {/* Mobile Number (read-only) */}
+              <div
+                className="rounded-lg p-3 ring-1 ring-border"
+                style={{ backgroundColor: "oklch(0.20 0.035 200)" }}
+              >
+                <div className="mb-1">
+                  <span className="text-xs text-muted-foreground">
+                    Mobile Number
+                  </span>
+                </div>
+                <p className="text-sm text-foreground font-mono">
+                  {currentUser.mobile}
+                </p>
+              </div>
+
+              {/* Village */}
+              <div
+                className="rounded-lg p-3 ring-1 ring-border"
+                style={{ backgroundColor: "oklch(0.20 0.035 200)" }}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-muted-foreground">Village</span>
+                  {!editingVillage ? (
+                    <button
+                      type="button"
+                      data-ocid="user.edit_button"
+                      onClick={() => {
+                        setVillageVal(currentUser.village);
+                        setEditingVillage(true);
+                      }}
+                      className="text-primary hover:text-primary/80 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingVillage(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                {editingVillage ? (
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      value={villageVal}
+                      onChange={(e) => setVillageVal(e.target.value)}
+                      className="h-7 text-sm"
+                      data-ocid="user.input"
+                    />
+                    <button
+                      type="button"
+                      data-ocid="user.save_button"
+                      onClick={handleSaveVillage}
+                      disabled={savingInfo}
+                      className="flex items-center gap-1 bg-primary text-primary-foreground text-xs px-2 py-1 rounded-md hover:bg-primary/80 disabled:opacity-50"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground font-medium">
+                    {currentUser.village || (
+                      <span className="text-muted-foreground italic">
+                        Not set
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Update Password Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Update Password
+            </h3>
+            <div
+              className="rounded-lg p-3 ring-1 ring-border space-y-2"
+              style={{ backgroundColor: "oklch(0.20 0.035 200)" }}
+            >
+              <Input
+                type="password"
+                placeholder="Current Password"
+                value={currentPwd}
+                onChange={(e) => setCurrentPwd(e.target.value)}
+                className="h-8 text-sm"
+                data-ocid="user.input"
+              />
+              <Input
+                type="password"
+                placeholder="New Password"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                className="h-8 text-sm"
+                data-ocid="user.input"
+              />
+              <Input
+                type="password"
+                placeholder="Confirm New Password"
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                className="h-8 text-sm"
+                data-ocid="user.input"
+              />
+              <Button
+                data-ocid="user.submit_button"
+                size="sm"
+                disabled={savingPwd || !currentPwd || !newPwd || !confirmPwd}
+                onClick={handleUpdatePassword}
+                className="w-full h-8 text-sm mt-1"
+              >
+                {savingPwd ? "Updating..." : "Update Password"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Subscription History Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Subscription History
+            </h3>
+            <div
+              className="rounded-lg p-3 ring-1 ring-border"
+              style={{ backgroundColor: "oklch(0.20 0.035 200)" }}
+            >
+              {subscriptionStatus}
+            </div>
+          </div>
+        </div>
+
+        {/* Logout */}
+        <div className="px-5 pb-6 border-t border-border pt-4">
+          <Button
+            data-ocid="user.button"
+            variant="destructive"
+            className="w-full"
+            onClick={() => {
+              onOpenChange(false);
+              onLogout();
+            }}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Log Out
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("login");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const { actor } = useActor();
+  const userActor = actor as unknown as UserActor | null;
 
   // Main view state
   const [currentVideoId, setCurrentVideoId] = useState<string>("II_m28Bm-iM");
@@ -346,6 +761,8 @@ export default function App() {
   const handleLoginSuccess = (user: {
     role: string;
     mobile: string;
+    fullName: string;
+    village: string;
     validityDate: string | null;
   }) => {
     setCurrentUser(user);
@@ -359,6 +776,10 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     setView("login");
+  };
+
+  const handleUserUpdate = (updated: Partial<CurrentUser>) => {
+    setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
   };
 
   const handlePlay = (channel: Channel) => {
@@ -427,14 +848,35 @@ export default function App() {
     >
       <Toaster />
 
+      {currentUser && (
+        <UserMenu
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          currentUser={currentUser}
+          onUserUpdate={handleUserUpdate}
+          onLogout={handleLogout}
+          actor={userActor}
+        />
+      )}
+
       {/* Header */}
       <header
-        className="sticky top-0 z-50 flex items-center gap-3 px-6 py-4 border-b border-border"
+        className="sticky top-0 z-50 flex items-center gap-3 px-4 py-4 border-b border-border"
         style={{
           backgroundColor: "oklch(0.15 0.04 200 / 0.95)",
           backdropFilter: "blur(12px)",
         }}
       >
+        {/* Hamburger menu button - left of logo */}
+        <button
+          type="button"
+          data-ocid="main.open_modal_button"
+          onClick={() => setMenuOpen(true)}
+          className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex-shrink-0"
+        >
+          <Menu style={{ width: 20, height: 20 }} />
+        </button>
+
         <div className="flex items-center gap-2.5">
           <img
             src="/assets/uploads/ss_local-019d3cf2-cb33-77b6-80dc-021c2b6b1286-1.png"
@@ -448,27 +890,28 @@ export default function App() {
           {currentUser?.mobile}
         </span>
         {!activated && (
-          <Badge className="bg-red-600/20 text-red-400 border-red-600/40 text-xs">
-            Subscribe to Unlock
-          </Badge>
-        )}
-        {activated && (
-          <Badge
-            variant="outline"
-            className="border-primary/40 text-primary text-xs"
+          <a
+            href="https://wa.me/919949176737"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 bg-green-600/20 text-green-400 border border-green-600/40 text-xs px-2 py-1 rounded-full hover:bg-green-600/30 transition-colors"
           >
-            Telugu Media
-          </Badge>
+            <svg
+              viewBox="0 0 24 24"
+              className="w-3.5 h-3.5 fill-current flex-shrink-0"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <title>WhatsApp</title>
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+            </svg>
+            9949176737 to Unlock
+          </a>
         )}
-        <button
-          type="button"
-          data-ocid="main.button"
-          onClick={handleLogout}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-white/5"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Logout
-        </button>
+        {activated && currentUser?.fullName && (
+          <span className="text-green-400 font-semibold text-sm hidden sm:block">
+            {currentUser.fullName}
+          </span>
+        )}
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">

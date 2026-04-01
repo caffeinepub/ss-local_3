@@ -6,7 +6,15 @@ import { toast } from "sonner";
 
 // Candid optional is [] | [T], not null
 type LoginResult =
-  | { ok: { role: string; mobile: string; validityDate: [] | [string] } }
+  | {
+      ok: {
+        role: string;
+        mobile: string;
+        fullName: string;
+        village: string;
+        validityDate: [] | [string];
+      };
+    }
   | { err: string };
 
 interface AuthActor {
@@ -17,6 +25,8 @@ interface LoginPageProps {
   onLoginSuccess: (user: {
     role: string;
     mobile: string;
+    fullName: string;
+    village: string;
     validityDate: string | null;
   }) => void;
   onSignUp: () => void;
@@ -50,13 +60,14 @@ export default function LoginPage({
         password,
       );
       if ("ok" in result) {
-        // Convert Candid optional ([] | [string]) to string | null
         const vd = result.ok.validityDate;
         const validityDate: string | null =
           vd.length > 0 ? (vd[0] as string) : null;
         onLoginSuccess({
           role: result.ok.role,
           mobile: result.ok.mobile,
+          fullName: result.ok.fullName ?? "",
+          village: result.ok.village ?? "",
           validityDate,
         });
       } else {
@@ -198,7 +209,7 @@ export default function LoginPage({
                   "#dc2626";
               }}
             >
-              Sign Up
+              Register
             </button>
           </div>
         </div>

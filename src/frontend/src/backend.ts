@@ -15,8 +15,8 @@ export interface None {
 export type Option<T> = Some<T> | None;
 
 export type RegisterResult = { ok: null } | { err: string };
-export type LoginResult = { ok: { role: string; mobile: string; validityDate: [] | [string] } } | { err: string };
-export type UserInfo = { mobile: string; validityDate: [] | [string] };
+export type LoginResult = { ok: { role: string; mobile: string; fullName: string; village: string; validityDate: [] | [string] } } | { err: string };
+export type UserInfo = { mobile: string; fullName: string; village: string; validityDate: [] | [string] };
 
 export class ExternalBlob {
     _blob?: Uint8Array<ArrayBuffer> | null;
@@ -48,20 +48,22 @@ export class ExternalBlob {
 }
 
 export interface backendInterface {
-    register(mobile: string, password: string): Promise<RegisterResult>;
+    register(mobile: string, password: string, fullName: string, village: string): Promise<RegisterResult>;
     login(username: string, password: string): Promise<LoginResult>;
     listAllUsers(): Promise<UserInfo[]>;
     setUserValidity(mobile: string, validityDate: string): Promise<RegisterResult>;
     removeUserValidity(mobile: string): Promise<RegisterResult>;
     deleteUser(mobile: string): Promise<RegisterResult>;
     getUserInfo(mobile: string): Promise<[] | [UserInfo]>;
+    updatePassword(mobile: string, oldPassword: string, newPassword: string): Promise<RegisterResult>;
+    updateUserInfo(mobile: string, fullName: string, village: string): Promise<RegisterResult>;
 }
 
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
 
-    async register(mobile: string, password: string): Promise<RegisterResult> {
-        return this.actor.register(mobile, password);
+    async register(mobile: string, password: string, fullName: string, village: string): Promise<RegisterResult> {
+        return this.actor.register(mobile, password, fullName, village);
     }
 
     async login(username: string, password: string): Promise<LoginResult> {
@@ -86,6 +88,14 @@ export class Backend implements backendInterface {
 
     async getUserInfo(mobile: string): Promise<[] | [UserInfo]> {
         return this.actor.getUserInfo(mobile);
+    }
+
+    async updatePassword(mobile: string, oldPassword: string, newPassword: string): Promise<RegisterResult> {
+        return this.actor.updatePassword(mobile, oldPassword, newPassword);
+    }
+
+    async updateUserInfo(mobile: string, fullName: string, village: string): Promise<RegisterResult> {
+        return this.actor.updateUserInfo(mobile, fullName, village);
     }
 }
 

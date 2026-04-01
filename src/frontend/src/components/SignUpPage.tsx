@@ -6,7 +6,12 @@ import { useState } from "react";
 type RegisterResult = { ok: null } | { err: string };
 
 interface AuthActor {
-  register(mobile: string, password: string): Promise<RegisterResult>;
+  register(
+    mobile: string,
+    password: string,
+    fullName: string,
+    village: string,
+  ): Promise<RegisterResult>;
 }
 
 interface SignUpPageProps {
@@ -16,6 +21,8 @@ interface SignUpPageProps {
 
 export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
   const { actor } = useActor();
+  const [fullName, setFullName] = useState("");
+  const [village, setVillage] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -27,7 +34,13 @@ export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
 
   const handleSignUp = async () => {
     setError("");
-    if (!mobile.trim() || !password.trim() || !confirm.trim()) {
+    if (
+      !fullName.trim() ||
+      !village.trim() ||
+      !mobile.trim() ||
+      !password.trim() ||
+      !confirm.trim()
+    ) {
       setError("All fields are required.");
       return;
     }
@@ -52,6 +65,8 @@ export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
       const result = await (actor as unknown as AuthActor).register(
         mobile.trim(),
         password,
+        fullName.trim(),
+        village.trim(),
       );
       if ("ok" in result) {
         setSuccess(
@@ -62,7 +77,7 @@ export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
         setError(result.err);
       }
     } catch {
-      setError("Sign up failed. Please try again.");
+      setError("Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -89,10 +104,28 @@ export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
         </div>
 
         <h1 className="text-center text-xl font-bold text-foreground mb-6 tracking-tight">
-          Create Account
+          Register
         </h1>
 
         <div className="space-y-4">
+          <Input
+            data-ocid="signup.input"
+            type="text"
+            placeholder="Full Name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            className="w-full bg-background border-border text-foreground placeholder:text-muted-foreground"
+          />
+
+          <Input
+            data-ocid="signup.input"
+            type="text"
+            placeholder="Village"
+            value={village}
+            onChange={(e) => setVillage(e.target.value)}
+            className="w-full bg-background border-border text-foreground placeholder:text-muted-foreground"
+          />
+
           <Input
             data-ocid="signup.input"
             type="tel"
@@ -185,7 +218,7 @@ export default function SignUpPage({ onBack, onSuccess }: SignUpPageProps) {
             }}
           >
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loading ? "Creating Account..." : "Sign Up"}
+            {loading ? "Registering..." : "Register"}
           </button>
 
           <button
