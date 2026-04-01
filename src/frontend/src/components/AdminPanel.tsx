@@ -1,3 +1,4 @@
+import type { RegisterResult } from "@/backend";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,15 +15,6 @@ import { Loader2, LogOut, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-type MutResult = { ok: null } | { err: string };
-
-interface RawUserInfo {
-  mobile: string;
-  fullName: string;
-  village: string;
-  validityDate: [] | [string];
-}
-
 interface UserInfo {
   mobile: string;
   fullName: string;
@@ -30,19 +22,8 @@ interface UserInfo {
   validityDate: string | null;
 }
 
-interface AdminActor {
-  listAllUsers(): Promise<RawUserInfo[]>;
-  setUserValidity(mobile: string, validityDate: string): Promise<MutResult>;
-  removeUserValidity(mobile: string): Promise<MutResult>;
-  deleteUser(mobile: string): Promise<MutResult>;
-}
-
 interface AdminPanelProps {
   onLogout: () => void;
-}
-
-function optToNull(opt: [] | [string]): string | null {
-  return opt.length > 0 ? (opt[0] as string) : null;
 }
 
 function getStatus(
@@ -57,7 +38,6 @@ function getStatus(
 
 export default function AdminPanel({ onLogout }: AdminPanelProps) {
   const { actor } = useActor();
-  const adminActor = actor as unknown as AdminActor | null;
   const queryClient = useQueryClient();
 
   const [editDates, setEditDates] = useState<Record<string, string>>({});
@@ -71,16 +51,16 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
   } = useQuery({
     queryKey: ["admin-users"] as const,
     queryFn: async (): Promise<UserInfo[]> => {
-      if (!adminActor) return [];
-      const raw = await adminActor.listAllUsers();
+      if (!actor) return [];
+      const raw = await actor.listAllUsers();
       return raw.map((u) => ({
         mobile: u.mobile,
         fullName: u.fullName ?? "",
         village: u.village ?? "",
-        validityDate: optToNull(u.validityDate),
+        validityDate: u.validUntil ?? null,
       }));
     },
-    enabled: !!adminActor,
+    enabled: !!actor,
   });
 
   const handleDateChange = (mobile: string, date: string) => {
@@ -88,7 +68,7 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
   };
 
   const handleUpdate = async (user: UserInfo) => {
-    if (!adminActor) return;
+    if (!actor) return;
     const date = editDates[user.mobile];
     if (!date) {
       toast.error("Please select a validity date first.");
@@ -96,8 +76,11 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
     }
     setSavingMobile(user.mobile);
     try {
-      const result = await adminActor.setUserValidity(user.mobile, date);
-      if ("ok" in result) {
+      const result: RegisterResult = await actor.setUserValidity(
+        user.mobile,
+        date,
+      );
+      if (result.__kind__ === "ok") {
         toast.success(`Validity updated for ${user.mobile}`);
         setEditDates((prev) => {
           const next = { ...prev };
@@ -116,11 +99,11 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
   };
 
   const handleDelete = async (mobile: string) => {
-    if (!adminActor) return;
+    if (!actor) return;
     setDeletingMobile(mobile);
     try {
-      const result = await adminActor.deleteUser(mobile);
-      if ("ok" in result) {
+      const result: RegisterResult = await actor.deleteUser(mobile);
+      if (result.__kind__ === "ok") {
         toast.success(`User ${mobile} deleted.`);
         queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       } else {

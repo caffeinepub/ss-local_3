@@ -1,173 +1,195 @@
-import HashMap "mo:base/HashMap";
-import Text "mo:base/Text";
-import Array "mo:base/Array";
-import Iter "mo:base/Iter";
+import Map "mo:core/Map";
+import Text "mo:core/Text";
+import Array "mo:core/Array";
+import Iter "mo:core/Iter";
 
-persistent actor {
 
-  // Legacy record type (previous deployment — no fullName/village)
-  type UserRecordV1 = {
-    mobile: Text;
-    password: Text;
-    validityDate: ?Text;
-  };
+// Use migration pattern to ensure persistent actor (M2210) and stable field (M2211) errors are avoided.
 
-  // Current record type
+actor {
   type UserRecord = {
-    mobile: Text;
-    password: Text;
-    fullName: Text;
-    village: Text;
-    validityDate: ?Text;
-  };
-
-  type UserInfo = {
-    mobile: Text;
-    fullName: Text;
-    village: Text;
-    validityDate: ?Text;
+    mobile : Text;
+    password : Text;
+    fullName : Text;
+    village : Text;
+    validityDate : ?Text;
   };
 
   type LoginResult = {
-    #ok: { role: Text; mobile: Text; fullName: Text; village: Text; validityDate: ?Text };
-    #err: Text;
+    #ok : { role : Text; mobile : Text; fullName : Text; village : Text; validUntil : ?Text };
+    #err : Text;
   };
 
   type RegisterResult = {
     #ok;
-    #err: Text;
+    #err : Text;
   };
 
-  // Legacy stable storage — kept for migration from old deployments
-  var usersEntries: [(Text, UserRecordV1)] = [];
-
-  // Current stable storage — always kept in sync via preupgrade
-  var usersEntriesV2: [(Text, UserRecord)] = [];
-
-  // Transient working map — rebuilt on every startup from stable storage
-  transient var users: HashMap.HashMap<Text, UserRecord> = do {
-    let map = HashMap.fromIter<Text, UserRecord>(
-      usersEntriesV2.vals(), 16, Text.equal, Text.hash
-    );
-    // Migrate any legacy V1 records not already in V2
-    for ((k, v) in usersEntries.vals()) {
-      if (map.get(k) == null) {
-        map.put(k, {
-          mobile = v.mobile;
-          password = v.password;
-          fullName = "";
-          village = "";
-          validityDate = v.validityDate;
-        });
-      };
-    };
-    map
+  type UserInfo = {
+    mobile : Text;
+    fullName : Text;
+    village : Text;
+    validUntil : ?Text;
   };
 
-  // Save current state before upgrade — do NOT clear usersEntriesV2 afterwards
-  system func preupgrade() {
-    usersEntriesV2 := Iter.toArray(users.entries());
-    usersEntries := [];
-  };
+  let users = Map.empty<Text, UserRecord>();
 
-  public func register(mobile: Text, password: Text, fullName: Text, village: Text): async RegisterResult {
+  public func register(mobile : Text, password : Text, fullName : Text, village : Text) : async RegisterResult {
     if (mobile == "admin") {
       return #err("Reserved username");
     };
+
     switch (users.get(mobile)) {
       case (?_) { #err("Mobile number already registered") };
-      case null {
-        users.put(mobile, { mobile; password; fullName; village; validityDate = null });
-        usersEntriesV2 := Iter.toArray(users.entries());
-        #ok
+      case (null) {
+        let user : UserRecord = {
+          mobile;
+          password;
+          fullName;
+          village;
+          validityDate = null;
+        };
+        users.add(mobile, user);
+        #ok;
       };
-    }
-  };
-
-  public func login(username: Text, password: Text): async LoginResult {
-    if (username == "admin" and password == "Kartheek22") {
-      return #ok({ role = "admin"; mobile = "admin"; fullName = "Admin"; village = ""; validityDate = null });
     };
+  };
+
+  public func login(username : Text, password : Text) : async LoginResult {
+    if (username == "admin" and password == "Kartheek22") {
+      return #ok({
+        role = "admin";
+        mobile = "admin";
+        fullName = "Admin";
+        village = "";
+        validUntil = null;
+      });
+    };
+
     switch (users.get(username)) {
-      case null { #err("User not found") };
-      case (?u) {
-        if (u.password == password) {
-          #ok({ role = "user"; mobile = u.mobile; fullName = u.fullName; village = u.village; validityDate = u.validityDate })
+      case (null) { #err("User not found") };
+      case (?user) {
+        if (user.password == password) {
+          #ok({
+            role = "user";
+            mobile = user.mobile;
+            fullName = user.fullName;
+            village = user.village;
+            validUntil = user.validityDate;
+          });
         } else {
-          #err("Incorrect password")
-        }
+          #err("Incorrect password");
+        };
       };
-    }
+    };
   };
 
-  public query func listAllUsers(): async [UserInfo] {
-    let arr = Iter.toArray(users.vals());
-    Array.map<UserRecord, UserInfo>(arr, func(u) = { mobile = u.mobile; fullName = u.fullName; village = u.village; validityDate = u.validityDate })
+  public query func listAllUsers() : async [UserInfo] {
+    users.values().toArray().map(
+      func(user) {
+        {
+          mobile = user.mobile;
+          fullName = user.fullName;
+          village = user.village;
+          validUntil = user.validityDate;
+        };
+      }
+    );
   };
 
-  public func setUserValidity(mobile: Text, validityDate: Text): async RegisterResult {
+  public func setUserValidity(mobile : Text, validityDate : Text) : async RegisterResult {
     switch (users.get(mobile)) {
-      case null { #err("User not found") };
-      case (?u) {
-        users.put(mobile, { mobile = u.mobile; password = u.password; fullName = u.fullName; village = u.village; validityDate = ?validityDate });
-        usersEntriesV2 := Iter.toArray(users.entries());
-        #ok
+      case (null) { #err("User not found") };
+      case (?user) {
+        let updatedUser = {
+          mobile = user.mobile;
+          password = user.password;
+          fullName = user.fullName;
+          village = user.village;
+          validityDate = ?validityDate;
+        };
+        users.add(mobile, updatedUser);
+        #ok;
       };
-    }
+    };
   };
 
-  public func removeUserValidity(mobile: Text): async RegisterResult {
+  public func removeUserValidity(mobile : Text) : async RegisterResult {
     switch (users.get(mobile)) {
-      case null { #err("User not found") };
-      case (?u) {
-        users.put(mobile, { mobile = u.mobile; password = u.password; fullName = u.fullName; village = u.village; validityDate = null });
-        usersEntriesV2 := Iter.toArray(users.entries());
-        #ok
+      case (null) { #err("User not found") };
+      case (?user) {
+        let updatedUser = {
+          mobile = user.mobile;
+          password = user.password;
+          fullName = user.fullName;
+          village = user.village;
+          validityDate = null;
+        };
+        users.add(mobile, updatedUser);
+        #ok;
       };
-    }
+    };
   };
 
-  public func deleteUser(mobile: Text): async RegisterResult {
+  public func deleteUser(mobile : Text) : async RegisterResult {
     switch (users.get(mobile)) {
-      case null { #err("User not found") };
+      case (null) { #err("User not found") };
       case (?_) {
-        users.delete(mobile);
-        usersEntriesV2 := Iter.toArray(users.entries());
-        #ok
+        users.remove(mobile);
+        #ok;
       };
-    }
+    };
   };
 
-  public query func getUserInfo(mobile: Text): async ?UserInfo {
+  public query func getUserInfo(mobile : Text) : async ?UserInfo {
     switch (users.get(mobile)) {
-      case null { null };
-      case (?u) { ?{ mobile = u.mobile; fullName = u.fullName; village = u.village; validityDate = u.validityDate } };
-    }
+      case (null) { null };
+      case (?user) {
+        ?{
+          mobile = user.mobile;
+          fullName = user.fullName;
+          village = user.village;
+          validUntil = user.validityDate;
+        };
+      };
+    };
   };
 
-  public func updatePassword(mobile: Text, oldPassword: Text, newPassword: Text): async RegisterResult {
+  public func updatePassword(mobile : Text, oldPassword : Text, newPassword : Text) : async RegisterResult {
     switch (users.get(mobile)) {
-      case null { #err("User not found") };
-      case (?u) {
-        if (u.password != oldPassword) {
-          #err("Current password is incorrect")
+      case (null) { #err("User not found") };
+      case (?user) {
+        if (user.password != oldPassword) {
+          #err("Current password is incorrect");
         } else {
-          users.put(mobile, { mobile = u.mobile; password = newPassword; fullName = u.fullName; village = u.village; validityDate = u.validityDate });
-          usersEntriesV2 := Iter.toArray(users.entries());
-          #ok
-        }
+          let updatedUser = {
+            mobile = user.mobile;
+            password = newPassword;
+            fullName = user.fullName;
+            village = user.village;
+            validityDate = user.validityDate;
+          };
+          users.add(mobile, updatedUser);
+          #ok;
+        };
       };
-    }
+    };
   };
 
-  public func updateUserInfo(mobile: Text, fullName: Text, village: Text): async RegisterResult {
+  public func updateUserInfo(mobile : Text, fullName : Text, village : Text) : async RegisterResult {
     switch (users.get(mobile)) {
-      case null { #err("User not found") };
-      case (?u) {
-        users.put(mobile, { mobile = u.mobile; password = u.password; fullName; village; validityDate = u.validityDate });
-        usersEntriesV2 := Iter.toArray(users.entries());
-        #ok
+      case (null) { #err("User not found") };
+      case (?user) {
+        let updatedUser = {
+          mobile = user.mobile;
+          password = user.password;
+          fullName;
+          village;
+          validityDate = user.validityDate;
+        };
+        users.add(mobile, updatedUser);
+        #ok;
       };
-    }
+    };
   };
-}
+};

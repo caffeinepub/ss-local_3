@@ -1,25 +1,9 @@
+import type { LoginResult } from "@/backend";
 import { Input } from "@/components/ui/input";
 import { useActor } from "@/hooks/useActor";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
-// Candid optional is [] | [T], not null
-type LoginResult =
-  | {
-      ok: {
-        role: string;
-        mobile: string;
-        fullName: string;
-        village: string;
-        validityDate: [] | [string];
-      };
-    }
-  | { err: string };
-
-interface AuthActor {
-  login(username: string, password: string): Promise<LoginResult>;
-}
 
 interface LoginPageProps {
   onLoginSuccess: (user: {
@@ -55,14 +39,9 @@ export default function LoginPage({
     setLoading(true);
     setError("");
     try {
-      const result = await (actor as unknown as AuthActor).login(
-        username.trim(),
-        password,
-      );
-      if ("ok" in result) {
-        const vd = result.ok.validityDate;
-        const validityDate: string | null =
-          vd.length > 0 ? (vd[0] as string) : null;
+      const result: LoginResult = await actor.login(username.trim(), password);
+      if (result.__kind__ === "ok") {
+        const validityDate: string | null = result.ok.validUntil ?? null;
         onLoginSuccess({
           role: result.ok.role,
           mobile: result.ok.mobile,
