@@ -16,6 +16,7 @@ import {
   Check,
   Lock,
   LogOut,
+  Maximize,
   Menu,
   Pencil,
   Radio,
@@ -295,6 +296,22 @@ function ChannelCard({
             <span className="w-1 h-1 bg-white rounded-full inline-block" />
             LIVE
           </span>
+        )}
+
+        {/* External link indicator for channel-only URLs */}
+        {isExternalOnly && !isLocked && (
+          <div className="absolute bottom-1 right-1 bg-black/60 rounded-full p-0.5">
+            <svg
+              viewBox="0 0 24 24"
+              className="w-3 h-3 fill-none stroke-white stroke-2"
+              aria-label="Open link"
+              role="img"
+            >
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+          </div>
         )}
 
         {isLocked && (
@@ -736,37 +753,130 @@ interface TabPlayerProps {
   videoId: string;
   title: string;
   isMuted: boolean;
+  volume: number;
   activated: boolean;
   onUnmute: () => void;
+  onVolumeChange: (v: number) => void;
   playerRef: React.RefObject<HTMLDivElement | null>;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
 }
 
 function TabPlayer({
   videoId,
   title,
   isMuted,
+  volume,
   activated,
   onUnmute,
+  onVolumeChange,
   playerRef,
+  iframeRef,
 }: TabPlayerProps) {
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&cc_load_policy=0&fs=0&disablekb=0&controls=1`;
+  // Build embed URL -- use enablejsapi for postMessage volume control
+  // origin param helps with postMessage
+  const origin =
+    typeof window !== "undefined"
+      ? encodeURIComponent(window.location.origin)
+      : "";
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&cc_load_policy=0&controls=1&enablejsapi=1&origin=${origin}`;
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // Request fullscreen on the container div
+    const reqFS =
+      el.requestFullscreen ||
+      (el as HTMLDivElement & { webkitRequestFullscreen?: () => void })
+        .webkitRequestFullscreen ||
+      (el as HTMLDivElement & { mozRequestFullScreen?: () => void })
+        .mozRequestFullScreen ||
+      (el as HTMLDivElement & { msRequestFullscreen?: () => void })
+        .msRequestFullscreen;
+
+    if (reqFS) {
+      reqFS
+        .call(el)
+        .then(() => {
+          // Try to lock to landscape on mobile
+          try {
+            const screen = window.screen as Screen & {
+              orientation?: { lock?: (o: string) => Promise<void> };
+            };
+            if (screen.orientation?.lock) {
+              screen.orientation.lock("landscape").catch(() => {});
+            }
+          } catch {
+            // not supported, ignore
+          }
+        })
+        .catch(() => {
+          // If fullscreen fails, try opening the iframe's src directly in fullscreen
+          const iframe = iframeRef.current;
+          if (iframe) {
+            const reqIFS =
+              iframe.requestFullscreen ||
+              (
+                iframe as HTMLIFrameElement & {
+                  webkitRequestFullscreen?: () => void;
+                }
+              ).webkitRequestFullscreen;
+            if (reqIFS) {
+              reqIFS.call(iframe).catch(() => {});
+            }
+          }
+        });
+    }
+  };
+
+  const handleVolumeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    onVolumeChange(v);
+    // If volume > 0, also unmute
+    if (v > 0 && isMuted) {
+      onUnmute();
+    }
+  };
 
   return (
     <section ref={playerRef} className="pt-4 pb-2" id="player">
-      <div className="relative w-full rounded-2xl overflow-hidden shadow-card ring-1 ring-border">
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600/90 text-white text-xs font-bold px-3 py-1 rounded-full live-pulse">
+      {/* Player wrapper -- overflow hidden prevents YouTube logo area from being clickable */}
+      <div
+        ref={containerRef}
+        className="relative w-full rounded-2xl overflow-hidden shadow-card ring-1 ring-border"
+        style={{ background: "#000" }}
+      >
+        {/* LIVE badge */}
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600/90 text-white text-xs font-bold px-3 py-1 rounded-full live-pulse pointer-events-none">
           <span className="w-2 h-2 bg-white rounded-full inline-block" />
           LIVE
         </div>
+
+        {/* Overlay that covers ONLY the top-right YouTube logo area to block "Watch on YouTube" click */}
+        <div
+          className="absolute top-0 right-0 z-10"
+          style={{
+            width: "30%",
+            height: "48px",
+            background: "transparent",
+            cursor: "default",
+            pointerEvents: "none",
+          }}
+        />
+
         <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
           {activated ? (
             <iframe
+              ref={iframeRef}
               key={`${videoId}-${isMuted}`}
               src={embedUrl}
               title={title}
-              allow="autoplay; encrypted-media; picture-in-picture"
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               allowFullScreen
               className="absolute inset-0 w-full h-full border-0"
+              style={{ pointerEvents: "auto" }}
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
@@ -821,21 +931,74 @@ function TabPlayer({
           )}
         </div>
       </div>
-      <div className="flex items-center gap-2 mt-3 px-1">
+
+      {/* Player controls bar */}
+      <div className="flex items-center gap-3 mt-2 px-1">
+        {/* Now Playing */}
         <Radio
           style={{ width: 15, height: 15 }}
-          className="text-primary live-pulse"
+          className="text-primary live-pulse flex-shrink-0"
         />
-        <span className="text-muted-foreground text-sm">Now Playing:</span>
-        <span className="text-foreground font-semibold text-sm">{title}</span>
-        {activated && isMuted && (
+        <span className="text-muted-foreground text-xs flex-shrink-0">
+          Now:
+        </span>
+        <span className="text-foreground font-semibold text-xs truncate flex-1">
+          {title}
+        </span>
+
+        {/* Volume control */}
+        {activated && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (isMuted) {
+                  onUnmute();
+                } else {
+                  onVolumeChange(0);
+                }
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX style={{ width: 15, height: 15 }} />
+              ) : (
+                <Volume2 style={{ width: 15, height: 15 }} />
+              )}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={isMuted ? 0 : volume}
+              onChange={handleVolumeInput}
+              className="w-20 h-1.5 accent-primary cursor-pointer"
+              style={{
+                WebkitAppearance: "none",
+                appearance: "none",
+                background: `linear-gradient(to right, var(--primary, #27C4B8) 0%, var(--primary, #27C4B8) ${
+                  isMuted ? 0 : volume
+                }%, rgba(255,255,255,0.2) ${
+                  isMuted ? 0 : volume
+                }%, rgba(255,255,255,0.2) 100%)`,
+                borderRadius: "9999px",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Fullscreen / Landscape button */}
+        {activated && (
           <button
             type="button"
-            onClick={onUnmute}
-            className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+            onClick={handleFullscreen}
+            title="Fullscreen (Landscape)"
+            className="flex items-center justify-center w-7 h-7 rounded-md bg-white/10 hover:bg-white/20 transition-colors flex-shrink-0"
           >
-            <VolumeX style={{ width: 15, height: 15 }} />
-            Muted
+            <Maximize
+              style={{ width: 14, height: 14 }}
+              className="text-white"
+            />
           </button>
         )}
       </div>
@@ -861,10 +1024,12 @@ export default function App() {
   const [youtubeVideoId, setYoutubeVideoId] = useState<string>("4lbtCVHm6R0");
   const [youtubeTitle, setYoutubeTitle] = useState<string>("DJ Songs");
 
-  // Shared mute state
+  // Shared mute + volume state
   const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [volume, setVolume] = useState<number>(80);
 
   const playerRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const handleLoginSuccess = (user: {
     role: string;
@@ -915,6 +1080,15 @@ export default function App() {
   };
 
   const handleUnmute = () => setIsMuted(false);
+
+  const handleVolumeChange = (v: number) => {
+    setVolume(v);
+    if (v === 0) {
+      setIsMuted(true);
+    } else {
+      setIsMuted(false);
+    }
+  };
 
   const activated = currentUser
     ? isUserActivated(currentUser.validityDate)
@@ -1087,9 +1261,12 @@ export default function App() {
               videoId={newsVideoId}
               title={newsTitle}
               isMuted={isMuted}
+              volume={volume}
               activated={activated}
               onUnmute={handleUnmute}
+              onVolumeChange={handleVolumeChange}
               playerRef={playerRef}
+              iframeRef={iframeRef}
             />
             <ChannelGrid
               channels={NEWS_CHANNELS}
@@ -1113,9 +1290,12 @@ export default function App() {
               videoId={devotionalVideoId}
               title={devotionalTitle}
               isMuted={isMuted}
+              volume={volume}
               activated={activated}
               onUnmute={handleUnmute}
+              onVolumeChange={handleVolumeChange}
               playerRef={playerRef}
+              iframeRef={iframeRef}
             />
             <ChannelGrid
               channels={BHAKTHI_CHANNELS}
@@ -1139,9 +1319,12 @@ export default function App() {
               videoId={youtubeVideoId}
               title={youtubeTitle}
               isMuted={isMuted}
+              volume={volume}
               activated={activated}
               onUnmute={handleUnmute}
+              onVolumeChange={handleVolumeChange}
               playerRef={playerRef}
+              iframeRef={iframeRef}
             />
             <ChannelGrid
               channels={YOUTUBE_CHANNELS}
