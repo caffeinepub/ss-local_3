@@ -18,9 +18,7 @@ import {
   LogOut,
   Menu,
   Pencil,
-  Play,
   Radio,
-  Tv,
   Volume2,
   VolumeX,
   X,
@@ -47,6 +45,7 @@ interface CurrentUser {
 }
 
 type View = "login" | "signup" | "admin" | "main";
+type TabId = "news" | "devotional" | "youtube";
 
 interface UserActor {
   updatePassword(
@@ -320,9 +319,7 @@ function ChannelCard({
   );
 }
 
-interface SectionProps {
-  title: string;
-  icon: React.ReactNode;
+interface ChannelGridProps {
   channels: Channel[];
   activeVideoId: string | null;
   isLocked: boolean;
@@ -330,37 +327,29 @@ interface SectionProps {
   sectionId: string;
 }
 
-function Section({
-  title,
-  icon,
+function ChannelGrid({
   channels,
   activeVideoId,
   isLocked,
   onPlay,
   sectionId,
-}: SectionProps) {
+}: ChannelGridProps) {
   return (
-    <section className="py-3">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="text-primary">{icon}</div>
-        <h2 className="text-xl font-bold text-foreground tracking-tight">
-          {title}
-        </h2>
-        <div className="flex-1 h-px bg-border ml-2" />
-      </div>
-      <div data-ocid={`${sectionId}.list`} className="grid grid-cols-4 gap-2">
-        {channels.map((ch, i) => (
-          <ChannelCard
-            key={ch.name}
-            channel={ch}
-            isActive={!!activeVideoId && activeVideoId === ch.videoId}
-            index={i}
-            isLocked={isLocked}
-            onPlay={onPlay}
-          />
-        ))}
-      </div>
-    </section>
+    <div
+      data-ocid={`${sectionId}.list`}
+      className="grid grid-cols-4 gap-2 py-3"
+    >
+      {channels.map((ch, i) => (
+        <ChannelCard
+          key={ch.name}
+          channel={ch}
+          isActive={!!activeVideoId && activeVideoId === ch.videoId}
+          index={i}
+          isLocked={isLocked}
+          onPlay={onPlay}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -382,14 +371,12 @@ function UserMenu({
   onLogout,
   actor,
 }: UserMenuProps) {
-  // Inline edit state
   const [editingFullName, setEditingFullName] = useState(false);
   const [editingVillage, setEditingVillage] = useState(false);
   const [fullNameVal, setFullNameVal] = useState(currentUser.fullName);
   const [villageVal, setVillageVal] = useState(currentUser.village);
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // Password update state
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -744,18 +731,139 @@ function UserMenu({
   );
 }
 
+// Per-tab video player
+interface TabPlayerProps {
+  videoId: string;
+  title: string;
+  isMuted: boolean;
+  activated: boolean;
+  onUnmute: () => void;
+  playerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+function TabPlayer({
+  videoId,
+  title,
+  isMuted,
+  activated,
+  onUnmute,
+  playerRef,
+}: TabPlayerProps) {
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0`;
+
+  return (
+    <section ref={playerRef} className="pt-4 pb-2" id="player">
+      <div className="relative w-full rounded-2xl overflow-hidden shadow-card ring-1 ring-border">
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600/90 text-white text-xs font-bold px-3 py-1 rounded-full live-pulse">
+          <span className="w-2 h-2 bg-white rounded-full inline-block" />
+          LIVE
+        </div>
+        <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+          {activated ? (
+            <iframe
+              key={`${videoId}-${isMuted}`}
+              src={embedUrl}
+              title={title}
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full border-0"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
+              <Lock className="w-12 h-12 text-white/40 mb-3" />
+              <p className="text-white font-semibold text-lg">
+                Subscribe to Watch
+              </p>
+              <p className="text-white/60 text-sm mt-1">
+                Contact admin to activate your account
+              </p>
+            </div>
+          )}
+          {activated && isMuted && (
+            <button
+              type="button"
+              className="absolute inset-0 flex items-center justify-center cursor-pointer z-20 w-full h-full"
+              style={{ background: "rgba(0,0,0,0.35)", border: "none" }}
+              onClick={onUnmute}
+            >
+              <motion.div
+                initial={{ scale: 0.7, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="flex flex-col items-center gap-3"
+              >
+                <div
+                  className="rounded-full flex items-center justify-center"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    background: "rgba(255,255,255,0.15)",
+                    border: "3px solid rgba(255,255,255,0.7)",
+                    backdropFilter: "blur(6px)",
+                  }}
+                >
+                  <VolumeX
+                    style={{ width: 15, height: 15 }}
+                    className="text-white"
+                  />
+                </div>
+                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-5 py-2 rounded-full">
+                  <Volume2
+                    style={{ width: 15, height: 15 }}
+                    className="text-white"
+                  />
+                  <span className="text-white font-bold text-base tracking-wide">
+                    Tap to Unmute
+                  </span>
+                </div>
+              </motion.div>
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 mt-3 px-1">
+        <Radio
+          style={{ width: 15, height: 15 }}
+          className="text-primary live-pulse"
+        />
+        <span className="text-muted-foreground text-sm">Now Playing:</span>
+        <span className="text-foreground font-semibold text-sm">{title}</span>
+        {activated && isMuted && (
+          <button
+            type="button"
+            onClick={onUnmute}
+            className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+          >
+            <VolumeX style={{ width: 15, height: 15 }} />
+            Muted
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("login");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>("news");
 
   const { actor } = useActor();
   const userActor = actor as unknown as UserActor | null;
 
-  // Main view state
-  const [currentVideoId, setCurrentVideoId] = useState<string>("II_m28Bm-iM");
-  const [currentTitle, setCurrentTitle] = useState<string>("TV9");
+  // Per-tab video state
+  const [newsVideoId, setNewsVideoId] = useState<string>("II_m28Bm-iM");
+  const [newsTitle, setNewsTitle] = useState<string>("TV9");
+  const [devotionalVideoId, setDevotionalVideoId] =
+    useState<string>("d0dB3kSCMmM");
+  const [devotionalTitle, setDevotionalTitle] = useState<string>("Bhakthi TV");
+  const [youtubeVideoId, setYoutubeVideoId] = useState<string>("4lbtCVHm6R0");
+  const [youtubeTitle, setYoutubeTitle] = useState<string>("DJ Songs");
+
+  // Shared mute state
   const [isMuted, setIsMuted] = useState<boolean>(true);
+
   const playerRef = useRef<HTMLDivElement>(null);
 
   const handleLoginSuccess = (user: {
@@ -782,27 +890,47 @@ export default function App() {
     setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
   };
 
-  const handlePlay = (channel: Channel) => {
+  const handlePlayNews = (channel: Channel) => {
     if (channel.videoId) {
-      setCurrentVideoId(channel.videoId);
-      setCurrentTitle(channel.name);
+      setNewsVideoId(channel.videoId);
+      setNewsTitle(channel.name);
       playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
-  const handleUnmute = () => {
-    setIsMuted(false);
+  const handlePlayDevotional = (channel: Channel) => {
+    if (channel.videoId) {
+      setDevotionalVideoId(channel.videoId);
+      setDevotionalTitle(channel.name);
+      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   };
+
+  const handlePlayYoutube = (channel: Channel) => {
+    if (channel.videoId) {
+      setYoutubeVideoId(channel.videoId);
+      setYoutubeTitle(channel.name);
+      playerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleUnmute = () => setIsMuted(false);
 
   const activated = currentUser
     ? isUserActivated(currentUser.validityDate)
     : false;
-  const embedUrl = `https://www.youtube.com/embed/${currentVideoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0`;
+
   const currentYear = new Date().getFullYear();
   const hostname =
     typeof window !== "undefined"
       ? encodeURIComponent(window.location.hostname)
       : "";
+
+  const TABS: { id: TabId; label: string }[] = [
+    { id: "news", label: "News" },
+    { id: "devotional", label: "Devotional" },
+    { id: "youtube", label: "Youtube" },
+  ];
 
   if (view === "login") {
     return (
@@ -861,187 +989,169 @@ export default function App() {
 
       {/* Header */}
       <header
-        className="sticky top-0 z-50 flex items-center gap-3 px-4 py-4 border-b border-border"
+        className="sticky top-0 z-50 border-b border-border"
         style={{
           backgroundColor: "oklch(0.15 0.04 200 / 0.95)",
           backdropFilter: "blur(12px)",
         }}
       >
-        {/* Hamburger menu button - left of logo */}
-        <button
-          type="button"
-          data-ocid="main.open_modal_button"
-          onClick={() => setMenuOpen(true)}
-          className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex-shrink-0"
-        >
-          <Menu style={{ width: 20, height: 20 }} />
-        </button>
-
-        <div className="flex items-center gap-2.5">
-          <img
-            src="/assets/uploads/ss_local-019d3cf2-cb33-77b6-80dc-021c2b6b1286-1.png"
-            alt="SS Local"
-            style={{ height: 46 }}
-            className="w-auto object-contain"
-          />
-        </div>
-        <div className="flex-1" />
-        <span className="text-muted-foreground text-xs hidden sm:block">
-          {currentUser?.mobile}
-        </span>
-        {!activated && (
-          <a
-            href="https://wa.me/919949176737"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 bg-green-600/20 text-green-400 border border-green-600/40 text-xs px-2 py-1 rounded-full hover:bg-green-600/30 transition-colors"
+        {/* Top row: hamburger + logo + user info */}
+        <div className="flex items-center gap-3 px-4 py-2">
+          {/* Hamburger menu button */}
+          <button
+            type="button"
+            data-ocid="main.open_modal_button"
+            onClick={() => setMenuOpen(true)}
+            className="flex items-center justify-center w-8 h-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex-shrink-0"
           >
-            <svg
-              viewBox="0 0 24 24"
-              className="w-3.5 h-3.5 fill-current flex-shrink-0"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <title>WhatsApp</title>
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-            </svg>
-            9949176737 to Unlock
-          </a>
-        )}
-        {activated && currentUser?.fullName && (
-          <span className="text-green-400 font-semibold text-sm hidden sm:block">
-            {currentUser.fullName}
+            <Menu style={{ width: 20, height: 20 }} />
+          </button>
+
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/assets/uploads/ss_local-019d3cf2-cb33-77b6-80dc-021c2b6b1286-1.png"
+              alt="SS Local"
+              style={{ height: 38 }}
+              className="w-auto object-contain"
+            />
+          </div>
+          <div className="flex-1" />
+          <span className="text-muted-foreground text-xs hidden sm:block">
+            {currentUser?.mobile}
           </span>
-        )}
+          {!activated && (
+            <a
+              href="https://wa.me/919949176737"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 bg-green-600/20 text-green-400 border border-green-600/40 text-xs px-2 py-1 rounded-full hover:bg-green-600/30 transition-colors"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="w-3.5 h-3.5 fill-current flex-shrink-0"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <title>WhatsApp</title>
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+              </svg>
+              9949176737 to Unlock
+            </a>
+          )}
+          {activated && currentUser?.fullName && (
+            <span className="text-green-400 font-semibold text-sm hidden sm:block">
+              {currentUser.fullName}
+            </span>
+          )}
+        </div>
+
+        {/* Tab navigation row */}
+        <div
+          className="flex w-full"
+          role="tablist"
+          aria-label="Channel sections"
+        >
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              data-ocid={`nav.${tab.id}.tab`}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                flex-1 py-2.5 text-sm font-semibold tracking-wide transition-all duration-200
+                border-b-2 focus:outline-none
+                ${
+                  activeTab === tab.id
+                    ? "border-primary text-primary bg-primary/10"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/5"
+                }
+              `}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-        {/* Section 1 — Video Player */}
-        <section ref={playerRef} className="pt-4 pb-2" id="player">
-          <div className="relative w-full rounded-2xl overflow-hidden shadow-card ring-1 ring-border">
-            <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-red-600/90 text-white text-xs font-bold px-3 py-1 rounded-full live-pulse">
-              <span className="w-2 h-2 bg-white rounded-full inline-block" />
-              LIVE
-            </div>
-            <div
-              className="relative w-full"
-              style={{ paddingBottom: "56.25%" }}
-            >
-              {activated ? (
-                <iframe
-                  key={`${currentVideoId}-${isMuted}`}
-                  src={embedUrl}
-                  title={currentTitle}
-                  allow="autoplay; encrypted-media; fullscreen"
-                  allowFullScreen
-                  className="absolute inset-0 w-full h-full border-0"
-                />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-                  <Lock className="w-12 h-12 text-white/40 mb-3" />
-                  <p className="text-white font-semibold text-lg">
-                    Subscribe to Watch
-                  </p>
-                  <p className="text-white/60 text-sm mt-1">
-                    Contact admin to activate your account
-                  </p>
-                </div>
-              )}
-              {activated && isMuted && (
-                <button
-                  type="button"
-                  className="absolute inset-0 flex items-center justify-center cursor-pointer z-20 w-full h-full"
-                  style={{ background: "rgba(0,0,0,0.35)", border: "none" }}
-                  onClick={handleUnmute}
-                >
-                  <motion.div
-                    initial={{ scale: 0.7, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-col items-center gap-3"
-                  >
-                    <div
-                      className="rounded-full flex items-center justify-center"
-                      style={{
-                        width: 48,
-                        height: 48,
-                        background: "rgba(255,255,255,0.15)",
-                        border: "3px solid rgba(255,255,255,0.7)",
-                        backdropFilter: "blur(6px)",
-                      }}
-                    >
-                      <VolumeX
-                        style={{ width: 15, height: 15 }}
-                        className="text-white"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-5 py-2 rounded-full">
-                      <Volume2
-                        style={{ width: 15, height: 15 }}
-                        className="text-white"
-                      />
-                      <span className="text-white font-bold text-base tracking-wide">
-                        Tap to Unmute
-                      </span>
-                    </div>
-                  </motion.div>
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 mt-3 px-1">
-            <Radio
-              style={{ width: 15, height: 15 }}
-              className="text-primary live-pulse"
+        {/* News Tab */}
+        {activeTab === "news" && (
+          <motion.div
+            key="news"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <TabPlayer
+              videoId={newsVideoId}
+              title={newsTitle}
+              isMuted={isMuted}
+              activated={activated}
+              onUnmute={handleUnmute}
+              playerRef={playerRef}
             />
-            <span className="text-muted-foreground text-sm">Now Playing:</span>
-            <span className="text-foreground font-semibold text-sm">
-              {currentTitle}
-            </span>
-            {activated && isMuted && (
-              <button
-                type="button"
-                onClick={handleUnmute}
-                className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-              >
-                <VolumeX style={{ width: 15, height: 15 }} />
-                Muted
-              </button>
-            )}
-          </div>
-        </section>
+            <ChannelGrid
+              channels={NEWS_CHANNELS}
+              activeVideoId={newsVideoId}
+              isLocked={!activated}
+              onPlay={handlePlayNews}
+              sectionId="news"
+            />
+          </motion.div>
+        )}
 
-        {/* Section 2 — News Channels */}
-        <Section
-          title="News Channels"
-          icon={<Tv style={{ width: 15, height: 15 }} />}
-          channels={NEWS_CHANNELS}
-          activeVideoId={currentVideoId}
-          isLocked={!activated}
-          onPlay={handlePlay}
-          sectionId="news"
-        />
+        {/* Devotional Tab */}
+        {activeTab === "devotional" && (
+          <motion.div
+            key="devotional"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <TabPlayer
+              videoId={devotionalVideoId}
+              title={devotionalTitle}
+              isMuted={isMuted}
+              activated={activated}
+              onUnmute={handleUnmute}
+              playerRef={playerRef}
+            />
+            <ChannelGrid
+              channels={BHAKTHI_CHANNELS}
+              activeVideoId={devotionalVideoId}
+              isLocked={!activated}
+              onPlay={handlePlayDevotional}
+              sectionId="devotional"
+            />
+          </motion.div>
+        )}
 
-        {/* Section 3 — Bhakthi Channels */}
-        <Section
-          title="Bhakthi Channels"
-          icon={<span style={{ fontSize: 20, lineHeight: 1 }}>🕉️</span>}
-          channels={BHAKTHI_CHANNELS}
-          activeVideoId={currentVideoId}
-          isLocked={!activated}
-          onPlay={handlePlay}
-          sectionId="bhakthi"
-        />
-
-        {/* Section 4 — YouTube */}
-        <Section
-          title="YouTube"
-          icon={<Play style={{ width: 15, height: 15 }} />}
-          channels={YOUTUBE_CHANNELS}
-          activeVideoId={currentVideoId}
-          isLocked={!activated}
-          onPlay={handlePlay}
-          sectionId="youtube"
-        />
+        {/* Youtube Tab */}
+        {activeTab === "youtube" && (
+          <motion.div
+            key="youtube"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <TabPlayer
+              videoId={youtubeVideoId}
+              title={youtubeTitle}
+              isMuted={isMuted}
+              activated={activated}
+              onUnmute={handleUnmute}
+              playerRef={playerRef}
+            />
+            <ChannelGrid
+              channels={YOUTUBE_CHANNELS}
+              activeVideoId={youtubeVideoId}
+              isLocked={!activated}
+              onPlay={handlePlayYoutube}
+              sectionId="youtube"
+            />
+          </motion.div>
+        )}
       </main>
 
       {/* Footer */}
