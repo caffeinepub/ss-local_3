@@ -11,8 +11,17 @@ import {
 } from "@/components/ui/table";
 import { useActor } from "@/hooks/useActor";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, LogOut, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
+import {
+  KeyRound,
+  Loader2,
+  LogOut,
+  Menu,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 interface UserInfo {
@@ -44,6 +53,21 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
   const [savingMobile, setSavingMobile] = useState<string | null>(null);
   const [deletingMobile, setDeletingMobile] = useState<string | null>(null);
 
+  // Search state
+  const [searchMobile, setSearchMobile] = useState("");
+  const [searchVillage, setSearchVillage] = useState("");
+
+  // Hamburger menu state
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Update password state
+  const [showUpdatePassword, setShowUpdatePassword] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+
   const {
     data: users,
     isLoading,
@@ -61,6 +85,17 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
       }));
     },
     enabled: !!actor,
+  });
+
+  // Filtered users based on search inputs
+  const filteredUsers = (users ?? []).filter((u) => {
+    const mobileMatch = u.mobile
+      .toLowerCase()
+      .includes(searchMobile.toLowerCase());
+    const villageMatch = u.village
+      .toLowerCase()
+      .includes(searchVillage.toLowerCase());
+    return mobileMatch && villageMatch;
   });
 
   const handleDateChange = (mobile: string, date: string) => {
@@ -116,6 +151,44 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
     }
   };
 
+  const handleUpdatePassword = async () => {
+    if (!actor) return;
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      toast.error("Please fill in all password fields.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error("New password must be at least 6 characters.");
+      return;
+    }
+    setUpdatingPassword(true);
+    try {
+      const result: RegisterResult = await actor.updatePassword(
+        "admin",
+        oldPassword,
+        newPassword,
+      );
+      if (result.__kind__ === "ok") {
+        toast.success("Admin password updated successfully.");
+        setOldPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowUpdatePassword(false);
+        setMenuOpen(false);
+      } else {
+        toast.error(result.err || "Failed to update password.");
+      }
+    } catch {
+      toast.error("Failed to update password.");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   const activatedUsers = (users ?? []).filter(
     (u) => getStatus(u.validityDate) === "active",
   );
@@ -132,19 +205,124 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
       }}
     >
       <header
-        className="sticky top-0 z-50 flex items-center gap-3 px-6 py-4 border-b border-border"
+        className="sticky top-0 z-50 flex items-center gap-3 px-4 py-3 border-b border-border"
         style={{
           backgroundColor: "oklch(0.15 0.04 200 / 0.95)",
           backdropFilter: "blur(12px)",
         }}
       >
+        {/* Hamburger menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen((v) => !v);
+              setShowUpdatePassword(false);
+            }}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            aria-label="Admin menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          {menuOpen && (
+            <div
+              className="absolute left-0 top-full mt-1 w-64 rounded-xl shadow-xl border border-border z-50 overflow-hidden"
+              style={{ backgroundColor: "oklch(0.20 0.04 200)" }}
+            >
+              {/* Admin label */}
+              <div className="px-4 py-3 border-b border-border">
+                <div className="text-sm font-semibold text-foreground">
+                  Admin
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Administrator
+                </div>
+              </div>
+
+              {!showUpdatePassword ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowUpdatePassword(true)}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-foreground hover:bg-white/10 transition-colors text-left"
+                  >
+                    <KeyRound className="w-4 h-4 text-muted-foreground" />
+                    Update Password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left border-t border-border"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <div className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-foreground">
+                      Update Password
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowUpdatePassword(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="password"
+                      placeholder="Current password"
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      className="rounded-md border border-border bg-background text-foreground text-xs px-3 py-2 w-full focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      type="password"
+                      placeholder="New password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="rounded-md border border-border bg-background text-foreground text-xs px-3 py-2 w-full focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="rounded-md border border-border bg-background text-foreground text-xs px-3 py-2 w-full focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleUpdatePassword}
+                      disabled={updatingPassword}
+                      className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground w-full mt-1"
+                    >
+                      {updatingPassword ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : null}
+                      Save Password
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <img
           src="/assets/uploads/ss_local-019d3cf2-cb33-77b6-80dc-021c2b6b1286-1.png"
           alt="SS Local"
-          style={{ height: 46 }}
+          style={{ height: 36 }}
           className="w-auto object-contain"
         />
-        <span className="text-foreground font-bold text-lg ml-2">
+        <span className="text-foreground font-bold text-base ml-1">
           Admin Panel
         </span>
         <div className="flex-1" />
@@ -153,26 +331,16 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
           variant="outline"
           size="sm"
           onClick={() => refetch()}
-          className="border-border text-muted-foreground"
+          className="border-border text-muted-foreground h-8"
         >
-          <RefreshCw className="w-4 h-4 mr-1" />
+          <RefreshCw className="w-3.5 h-3.5 mr-1" />
           Refresh
-        </Button>
-        <Button
-          data-ocid="admin.button"
-          variant="outline"
-          size="sm"
-          onClick={onLogout}
-          className="border-border text-muted-foreground"
-        >
-          <LogOut className="w-4 h-4 mr-1" />
-          Logout
         </Button>
       </header>
 
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
         {/* Summary counts */}
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-5">
           <div
             className="rounded-xl px-5 py-3 flex flex-col items-center shadow-card ring-1 ring-border"
             style={{ backgroundColor: "oklch(0.22 0.035 200)" }}
@@ -202,6 +370,51 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
           </div>
         </div>
 
+        {/* Search bar */}
+        <div
+          className="flex flex-col sm:flex-row gap-3 mb-4 p-4 rounded-xl ring-1 ring-border"
+          style={{ backgroundColor: "oklch(0.22 0.035 200)" }}
+        >
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by mobile number..."
+              value={searchMobile}
+              onChange={(e) => setSearchMobile(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-md border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            {searchMobile && (
+              <button
+                type="button"
+                onClick={() => setSearchMobile("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search by village name..."
+              value={searchVillage}
+              onChange={(e) => setSearchVillage(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-md border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            {searchVillage && (
+              <button
+                type="button"
+                onClick={() => setSearchVillage("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
         <div
           className="rounded-2xl overflow-hidden shadow-card ring-1 ring-border"
           style={{ backgroundColor: "oklch(0.22 0.035 200)" }}
@@ -216,12 +429,14 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
                 Loading users...
               </span>
             </div>
-          ) : !users || users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div
               data-ocid="admin.empty_state"
               className="text-center py-16 text-muted-foreground"
             >
-              No users registered yet.
+              {(users ?? []).length === 0
+                ? "No users registered yet."
+                : "No users match the search."}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -250,7 +465,7 @@ export default function AdminPanel({ onLogout }: AdminPanelProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((user, i) => {
+                  {filteredUsers.map((user, i) => {
                     const status = getStatus(user.validityDate);
                     const rowDate = editDates[user.mobile] ?? "";
                     const isSaving = savingMobile === user.mobile;
