@@ -772,13 +772,12 @@ function TabPlayer({
   playerRef,
   iframeRef,
 }: TabPlayerProps) {
-  // Build embed URL -- use enablejsapi for postMessage volume control
-  // origin param helps with postMessage
+  // Build embed URL -- fs=0 disables YouTube fullscreen button (we have our own)
   const origin =
     typeof window !== "undefined"
       ? encodeURIComponent(window.location.origin)
       : "";
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&cc_load_policy=0&controls=1&enablejsapi=1&origin=${origin}`;
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&cc_load_policy=0&fs=0&controls=1&enablejsapi=1&origin=${origin}`;
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -842,7 +841,7 @@ function TabPlayer({
 
   return (
     <section ref={playerRef} className="pt-4 pb-2" id="player">
-      {/* Player wrapper -- overflow hidden prevents YouTube logo area from being clickable */}
+      {/* Player wrapper -- overflow hidden clips the iframe so overlays can mask YouTube UI */}
       <div
         ref={containerRef}
         className="relative w-full rounded-2xl overflow-hidden shadow-card ring-1 ring-border"
@@ -854,7 +853,7 @@ function TabPlayer({
           LIVE
         </div>
 
-        {/* Overlay that covers ONLY the top-right YouTube logo area to block "Watch on YouTube" click */}
+        {/* Top-right overlay: blocks YouTube logo / "Watch on YouTube" button and settings gear */}
         <div
           className="absolute top-0 right-0 z-10"
           style={{
@@ -862,7 +861,19 @@ function TabPlayer({
             height: "48px",
             background: "transparent",
             cursor: "default",
-            pointerEvents: "none",
+            pointerEvents: "auto",
+          }}
+        />
+
+        {/* Bottom overlay: blocks YouTube channel name, logo, and branding bar */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-10"
+          style={{
+            width: "100%",
+            height: "40px",
+            background: "transparent",
+            cursor: "default",
+            pointerEvents: "auto",
           }}
         />
 
