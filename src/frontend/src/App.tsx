@@ -749,7 +749,7 @@ function TabPlayer({
   onUnmute,
   playerRef,
 }: TabPlayerProps) {
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0`;
+  const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=${isMuted ? 1 : 0}&rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&cc_load_policy=0&fs=0&disablekb=0&controls=1`;
 
   return (
     <section ref={playerRef} className="pt-4 pb-2" id="player">
@@ -764,7 +764,7 @@ function TabPlayer({
               key={`${videoId}-${isMuted}`}
               src={embedUrl}
               title={title}
-              allow="autoplay; encrypted-media; fullscreen"
+              allow="autoplay; encrypted-media; picture-in-picture"
               allowFullScreen
               className="absolute inset-0 w-full h-full border-0"
             />
