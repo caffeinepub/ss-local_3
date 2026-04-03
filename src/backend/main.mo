@@ -1,10 +1,6 @@
 import Map "mo:core/Map";
 import Text "mo:core/Text";
-import Array "mo:core/Array";
 import Iter "mo:core/Iter";
-
-
-// Use migration pattern to ensure persistent actor (M2210) and stable field (M2211) errors are avoided.
 
 actor {
   type UserRecord = {
@@ -32,6 +28,7 @@ actor {
     validUntil : ?Text;
   };
 
+  // mo:core/Map is stable-compatible and mutable via dot notation
   let users = Map.empty<Text, UserRecord>();
 
   public func register(mobile : Text, password : Text, fullName : Text, village : Text) : async RegisterResult {
@@ -86,7 +83,7 @@ actor {
 
   public query func listAllUsers() : async [UserInfo] {
     users.values().toArray().map(
-      func(user) {
+      func(user : UserRecord) : UserInfo {
         {
           mobile = user.mobile;
           fullName = user.fullName;
@@ -101,7 +98,7 @@ actor {
     switch (users.get(mobile)) {
       case (null) { #err("User not found") };
       case (?user) {
-        let updatedUser = {
+        let updatedUser : UserRecord = {
           mobile = user.mobile;
           password = user.password;
           fullName = user.fullName;
@@ -118,7 +115,7 @@ actor {
     switch (users.get(mobile)) {
       case (null) { #err("User not found") };
       case (?user) {
-        let updatedUser = {
+        let updatedUser : UserRecord = {
           mobile = user.mobile;
           password = user.password;
           fullName = user.fullName;
@@ -162,7 +159,7 @@ actor {
         if (user.password != oldPassword) {
           #err("Current password is incorrect");
         } else {
-          let updatedUser = {
+          let updatedUser : UserRecord = {
             mobile = user.mobile;
             password = newPassword;
             fullName = user.fullName;
@@ -180,7 +177,7 @@ actor {
     switch (users.get(mobile)) {
       case (null) { #err("User not found") };
       case (?user) {
-        let updatedUser = {
+        let updatedUser : UserRecord = {
           mobile = user.mobile;
           password = user.password;
           fullName;
